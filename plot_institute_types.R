@@ -1,8 +1,8 @@
-pacman::p_load(countrycode, dplyr, ggplot2, janitor, rio, tidyverse)
+pacman::p_load(countrycode, dplyr, ggplot2, ggthemes, janitor, plyr, rio, sf, tidyverse)
 
 active_participants <- import("SummaryParticipation - Sheet1.csv") %>%
-  rename(title = `Title (e.g. Mr, Ms, Dr)`) %>%
-  rename(institution = `Current institution`) %>%
+  dplyr::rename(title = `Title (e.g. Mr, Ms, Dr)`) %>%
+  dplyr::rename(institution = `Current institution`) %>%
   mutate(institution_type = case_when(
     grepl("university", institution, ignore.case = TRUE) ~ "academic",
     grepl("universitas", institution, ignore.case = TRUE) ~ "academic",
@@ -76,36 +76,39 @@ active_participants <- import("SummaryParticipation - Sheet1.csv") %>%
                                  custom_match = c("Kosovo" = "Europe"))) %>%
   mutate(continent = replace(continent, Country %in% c("Argentina", "Chile", "Brazil"), "South America")) %>%
   mutate(continent = replace(continent, Country %in% c("Mexico", "USA", "Canada"), "North America")) %>%
-  arrange(factor(Date, levels = c("March2022", 
-                                  "January2023",
+  mutate(Date = mapvalues(Date, c("March2022", "January2023", "October 2023", "June2024"),
+                          c("March 2022", "January 2023", "October 2023", "June 2024"))) %>%
+  arrange(factor(Date, levels = c("March 2022", 
+                                  "January 2023",
                                   "October 2023",
-                                  "June2024")))
+                                  "June 2024")))
 
 unknown <- active_participants %>% filter(institution_type == "unknown") %>% select(institution, Country)
 
-by_date <- active_participants %>% group_by(Date, institution_type) %>% count() %>%
-  arrange(factor(Date, levels = c("March2022", 
-                                  "January2023",
+by_date <- active_participants %>% group_by(Date, institution_type) %>% dplyr::count() %>%
+  arrange(factor(Date, levels = c("March 2022", 
+                                  "January 2023",
                                   "October 2023",
-                                  "June2024")))
+                                  "June 2024")))
 
-by_country = active_participants %>% group_by(Date, Country) %>% count() %>%
-  arrange(factor(Date, levels = c("March2022", 
-                                  "January2023",
+by_country = active_participants %>% dplyr::group_by(Date, Country) %>% dplyr::count() %>%
+  arrange(factor(Date, levels = c("March 2022", 
+                                  "January 2023",
                                   "October 2023",
-                                  "June2024")))
+                                  "June 2024")))
 
-by_continent = active_participants %>% group_by(Date, continent) %>% count() %>%
-  arrange(factor(Date, levels = c("March2022", 
-                                  "January2023",
+by_continent = active_participants %>% group_by(Date, continent) %>% dplyr::count() %>%
+  arrange(factor(Date, levels = c("March 2022", 
+                                  "January 2023",
                                   "October 2023",
-                                  "June2024")))
+                                  "June 2024")))
 
 ggplot(by_date, aes(x = fct_inorder(Date), y = n, fill=institution_type)) +
   geom_bar(stat = "identity") + 
   labs(x = "Course", y = "Count",
        fill = "Institution Type",
-       title = "Active Participants by Institution Type")
+       title = "Active Participants by Institution Type") +
+  theme_calc()
   
 ggplot(by_country, aes(x = fct_inorder(Date), y = n, fill=Country)) +
   geom_bar(stat = "identity") + 
@@ -118,3 +121,19 @@ ggplot(by_continent, aes(x = fct_inorder(Date), y = n, fill=continent)) +
   labs(x = "Course", y = "Count",
        fill = "Continent",
        title = "Active Participants by Continent")
+
+# map created using https://geojson-maps.kyd.au/
+world_map <- read_sf("worldmap.geojson")
+
+ggplot(world_map) + geom_sf(fill = "white", color = "black", linewidth = 0.3)
+
+by_country_total = active_participants %>% group_by(Country) %>% count()
+
+world_map_active_participants <- world_map %>%
+  left_join(by_country_total, by = c("sovereignt" = "Country"))
+
+ggplot(world_map_active_participants) +
+  geom_sf(aes(fill = n)) +
+  scale_fill_viridis_c(na.value = "white") +
+  labs(fill = "Participants",
+       title = "Number of Active Participants by Country")
